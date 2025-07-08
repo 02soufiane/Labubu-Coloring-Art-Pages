@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Labubu Coloring Studio</title>
+  <style>
+    /* ───── RESET ───── */
+    *{box-sizing:border-box;margin:0;padding:0;font-family:"Segoe UI",sans-serif;-webkit-tap-highlight-color:transparent}
+    body{display:flex;height:100vh;overflow:hidden;background:#fff;color:#222}
+
+    /* ───── MAIN LAYOUT ───── */
+    .stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
+    canvas{max-width:90%;max-height:90%;border:2px solid #111;border-radius:4px;touch-action:none;background:#fff}
+
+    /* Page arrows */
+    .page-nav{position:absolute;left:10px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:.6rem;z-index:10}
+    .page-nav button{background:none;border:none;font-size:2.5rem;color:#007aff;cursor:pointer}
+
+    /* Size slider bottom‑left */
+    .size-control{position:absolute;left:14px;bottom:14px;width:140px;z-index:10}
+    .slider{width:100%;-webkit-appearance:none;height:6px;background:#eee;border-radius:3px;cursor:pointer}
+    .slider::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid #000}
+    .slider::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid #000}
+
+    /* ───── RIGHT SIDEBAR ───── */
+    .sidebar{width:70px;background:#00a0e3;display:flex;flex-direction:column;align-items:center;gap:.5rem;padding:.5rem 0}
+    .tool{width:48px;height:48px;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:1.4rem;cursor:pointer;border:2px solid #000}
+    .swatch{width:48px;height:48px;border-radius:8px;cursor:pointer;border:2px solid #fff;transition:transform .15s}
+    .swatch.selected{outline:4px solid #000;transform:scale(1.1)}
+    @media(hover:hover){.swatch:hover{transform:scale(1.1)}}
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <!-- Arrows -->
+    <div class="page-nav">
+      <button id="btn-prev" title="Previous">‹</button>
+      <button id="btn-next" title="Next">›</button>
+    </div>
+    <!-- Canvas -->
+    <canvas id="canvas" tabindex="0"></canvas>
+    <!-- Brush size slider -->
+    <div class="size-control">
+      <input type="range" id="brush-range" class="slider" min="4" max="40" step="2" value="12" title="Brush size">
+    </div>
+  </div>
+
+  <!-- Right sidebar: palette & tools -->
+  <aside class="sidebar" id="sidebar">
+    <div class="tool" id="btn-undo" title="Undo">⟲</div>
+    <div class="tool" id="btn-reset" title="Reset">🔄</div>
+    <div class="tool" id="btn-save" title="Save">📸</div>
+    <!-- palette injects here via JS -->
+  </aside>
+
+<script>
+/******** CONFIG ********/ 
+const totalPages=5;
+const images=Array.from({length:totalPages},(_,i)=>`${i+1}.jpg`);
+const paletteColors=['#f44336','#e91e63','#9c27b0','#673ab7','#3f51b5','#2196f3','#03a9f4','#00bcd4','#009688','#4caf50','#8bc34a','#cddc39','#ffeb3b','#ffc107','#ff9800','#ff5722','#795548','#9e9e9e','#000000','#ffffff'];
+/******** STATE ********/
+let currentPage=0,drawing=false,brushRadius=12,pickColor=paletteColors[0];
+/******** DOM ********/
+const cvs=document.getElementById('canvas'),ctx=cvs.getContext('2d',{willReadFrequently:true});
+const sidebar=document.getElementById('sidebar');
+const btnPrev=document.getElementById('btn-prev'),btnNext=document.getElementById('btn-next');
+const btnReset=document.getElementById('btn-reset'),btnSave=document.getElementById('btn-save');
+const brushRange=document.getElementById('brush-range');
+/******** INIT ********/
+createPalette();loadPage(currentPage);setCursor();
+brushRange.oninput=e=>{brushRadius=+e.target.value;setCursor();};
+/******** EVENTS ********/
+btnPrev.onclick=()=>{if(currentPage>0){currentPage--;loadPage(currentPage);}};
+btnNext.onclick=()=>{if(currentPage<images.length-1){currentPage++;loadPage(currentPage);}};
+let startX=null;cvs.addEventListener('touchstart',e=>{startX=e.touches[0].clientX});cvs.addEventListener('touchend',e=>{if(startX===null)return;const dx=e.changedTouches[0].clientX-startX;if(Math.abs(dx)>60){dx<0?btnNext.click():btnPrev.click();}startX=null});
+// Drawing
+cvs.addEventListener('pointerdown',startDraw);cvs.addEventListener('pointermove',drawMove);cvs.addEventListener('pointerup',()=>drawing=false);cvs.addEventListener('pointerleave',()=>drawing=false);
+btnReset.onclick=()=>loadPage(currentPage);
+btnSave.onclick=()=>{const a=document.createElement('a');a.download=`labubu-${currentPage+1}.png`;a.href=cvs.toDataURL();a.click();};
+/******** FUNCTIONS ********/
+function createPalette(){paletteColors.forEach(c=>{const d=document.createElement('div');d.className='swatch';d.style.background=c;d.onclick=()=>{document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('selected'));d.classList.add('selected');pickColor=c;setCursor();};sidebar.appendChild(d);if(c===pickColor)d.classList.add('selected');});}
+function setCursor(){const r=brushRadius;const svg=`<svg xmlns='http://www.w3.org/2000/svg' width='${r*2}' height='${r*2}'><circle cx='${r}' cy='${r}' r='${r}' fill='${pickColor}'/></svg>`;const url=`data:image/svg+xml;base64,${btoa(svg)}`;cvs.style.cursor=`url(${url}) ${r} ${r},crosshair`;}
+function loadPage(i){const img=new Image();img.src=images[i];img.onload=()=>{cvs.width=img.width;cvs.height=img.height;ctx.clearRect(0,0,cvs.width,cvs.height);ctx.drawImage(img,0,0);};}
+function getPos(ev){const r=cvs.getBoundingClientRect();return{x:(ev.clientX-r.left)*(cvs.width/r.width),y:(ev.clientY-r.top)*(cvs.height/r.height)};}
+function startDraw(e){drawing=true;const p=getPos(e);dot(p.x,p.y);}function drawMove(e){if(!drawing)return;const p=getPos(e);dot(p.x,p.y);}function dot(x,y){ctx.fillStyle=pickColor;ctx.beginPath();ctx.arc(x,y,brushRadius,0,Math.PI*2);ctx.fill();}
+</script>
+</body>
+</html>
